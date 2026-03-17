@@ -9,9 +9,9 @@ const nodeserver = createServer(app);
 const io = new Server(nodeserver, {
   cors: {
     origin: process.env.CORS_ORIGIN,
+    credentials: true,
   },
 });
-
 
 const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD || "12345";
 
@@ -47,7 +47,7 @@ io.on("connection", (socket) => {
     }
 
     const existingUser = Array.from(groupData.users.values()).find(
-      (u) => u.username.toLowerCase() === cleanUsername.toLowerCase()
+      (u) => u.username.toLowerCase() === cleanUsername.toLowerCase(),
     );
     if (existingUser) {
       socket.emit("join:error", { message: "Username already taken" });
@@ -70,7 +70,7 @@ io.on("connection", (socket) => {
 
         io.emit(
           "users:update",
-          Array.from(groupData.users.values()).map((u) => u.username)
+          Array.from(groupData.users.values()).map((u) => u.username),
         );
 
         io.emit("message:new", {
@@ -161,7 +161,7 @@ io.on("connection", (socket) => {
 
       io.emit(
         "users:update",
-        Array.from(groupData.users.values()).map((u) => u.username)
+        Array.from(groupData.users.values()).map((u) => u.username),
       );
     }
   });
@@ -197,7 +197,7 @@ io.on("connection", (socket) => {
 
         io.emit(
           "users:update",
-          Array.from(groupData.users.values()).map((u) => u.username)
+          Array.from(groupData.users.values()).map((u) => u.username),
         );
 
         io.emit("message:new", {
@@ -296,7 +296,7 @@ io.on("connection", (socket) => {
       if (groupData.host) {
         io.emit(
           "users:update",
-          Array.from(groupData.users.values()).map((u) => u.username)
+          Array.from(groupData.users.values()).map((u) => u.username),
         );
       }
 

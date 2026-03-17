@@ -1,60 +1,20 @@
-@font-face {
-  font-family: 'Amazon Ember';
-  src: url('https://d1.awsstatic.com/webteam/architecture-icons/AmazonEmber_W_Rg.woff2') format('woff2');
-  font-weight: normal;
-  font-style: normal;
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600&display=swap');
+
+.font-syne {
+  font-family: 'Syne', sans-serif;
 }
 
-@font-face {
-  font-family: 'Amazon Ember';
-  src: url('https://d1.awsstatic.com/webteam/architecture-icons/AmazonEmber_W_Bd.woff2') format('woff2');
-  font-weight: bold;
-  font-style: normal;
+body, #root {
+  font-family: 'Inter', system-ui, sans-serif;
+  height: 100%;
 }
 
-@font-face {
-  font-family: 'Amazon Ember';
-  src: url('https://d1.awsstatic.com/webteam/architecture-icons/AmazonEmber_W_Lt.woff2') format('woff2');
-  font-weight: 300;
-  font-style: normal;
+html {
+  height: 100%;
 }
 
-@font-face {
-  font-family: 'Amazon Ember';
-  src: url('https://d1.awsstatic.com/webteam/architecture-icons/AmazonEmber_W_Md.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-}
-
-.font-ember {
-  font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.font-ember-bold {
-  font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-weight: bold;
-}
-
-.font-ember-medium {
-  font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-weight: 500;
-}
-
-.font-ember-light {
-  font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-weight: 300;
-}
-
-.font-ember-heavy {
-  font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-weight: 900;
-}
-
-.bg-chat-pattern {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill='%23121d24' fill-opacity='0.3'%3E%3Cpath d='M96 95h4v1h-4v4h-1v-4h-4v-1h4v-4h1v4zM40 85h4v1h-4v4h-1v-4h-4v-1h4v-4h1v4zM40 35h4v1h-4v4h-1v-4h-4v-1h4v-4h1v4zM96 35h4v1h-4v4h-1v-4h-4v-1h4v-4h1v4zM68 60h4v1h-4v4h-1v-4h-4v-1h4v-4h1v4zM68 10h4v1h-4v4h-1v-4h-4v-1h4v-4h1v4zM20 60h4v1h-4v4h-1v-4h-4v-1h4v-4h1v4zM20 10h4v1h-4v4h-1v-4h-4v-1h4v-4h1v4z'/%3E%3C/g%3E%3C/svg%3E");
-}
-
-.no-scrollbar {
+.no-scrollbar,
+.no-scrollbar * {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
@@ -63,66 +23,237 @@
   display: none;
 }
 
+
 * {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.06) transparent;
 }
 
 *::-webkit-scrollbar {
-  display: none;
+  width: 3px;
 }
 
-html, body {
-  overflow: hidden;
-  -webkit-overflow-scrolling: touch;
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.chat-messages-container {
-  -webkit-overflow-scrolling: touch;
-  overflow-y: auto;
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
 }
 
-.chat-messages-container::-webkit-scrollbar {
-  display: none;
+@keyframes float-orb {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  40% {
+    transform: translate(40px, -50px) scale(1.06);
+  }
+
+  70% {
+    transform: translate(-25px, 25px) scale(0.97);
+  }
 }
 
-body {
-  font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, sans-serif;
+@keyframes lobby-fadein {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-* {
-  transition: background-color 0.2s ease;
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.chat-messages-container p,
-.chat-messages-container span,
-input, textarea {
-  user-select: text;
-  -webkit-user-select: text;
-  font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, sans-serif;
+@keyframes alert-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.9);
+    transform-origin: top;
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes online-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes icon-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.12);
+  }
+
+  50% {
+    box-shadow: 0 0 32px rgba(16, 185, 129, 0.28);
+  }
+}
+
+@keyframes btn-arrow-move {
+  0%, 100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.lobby-fadein {
+  animation: lobby-fadein 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.lobby-alert-in {
+  animation: alert-in 0.2s ease both;
+}
+
+.toast-in {
+  animation: toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.msg-in {
+  animation: msg-in 0.18s ease both;
+}
+
+.online-pulse {
+  animation: online-pulse 2.2s ease-in-out infinite;
+}
+
+.icon-glow-green {
+  animation: icon-glow 2.5s ease-in-out infinite;
+}
+
+.btn-arrow {
+  display: inline-block;
+  animation: btn-arrow-move 1.6s ease-in-out infinite;
+}
+
+
+.btn-lift {
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s;
+}
+
+.btn-lift:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.btn-lift:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+.typing-dots span {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #10b981;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.lobby-grid {
+  background-image:
+    linear-gradient(rgba(16, 185, 129, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black, transparent);
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black, transparent);
+}
+
+.orb {
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+}
+
+.orb-green {
+  width: 460px;
+  height: 460px;
+  top: -160px;
+  left: -160px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
+  animation: float-orb 18s ease-in-out infinite;
+}
+
+.orb-amber {
+  width: 380px;
+  height: 380px;
+  bottom: -120px;
+  right: -120px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.07) 0%, transparent 70%);
+  animation: float-orb 22s ease-in-out infinite reverse;
+}
+
+.chat-bg {
+  background:
+    radial-gradient(ellipse 55% 35% at 0% 100%, rgba(16, 185, 129, 0.025) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 25% at 100% 0%, rgba(96, 165, 250, 0.02) 0%, transparent 70%),
+    #07090d;
 }
 
 @media (max-width: 768px) {
   input, textarea {
-    font-size: 16px;
-  }
-  
-  body {
-    font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 16px !important;
   }
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-in-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .flex-shrink-0:last-child {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
 }

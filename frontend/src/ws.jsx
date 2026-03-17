@@ -1,4 +1,6 @@
 import { io } from "socket.io-client";
+
+const backend = import.meta.env.VITE_CORS_BACKEND_ORIGIN
 export function wsConnection() {
-  return io("https://realtime-chat-app-backend-782h.onrender.com");
+  return io(`${backend}`);
 }

@@ -12,6 +12,7 @@ import {
   UserPlus,
   X,
   AlertCircle,
+  ArrowLeft,
 } from "lucide-react";
 import { wsConnection } from "./ws.jsx";
 
@@ -52,20 +53,14 @@ function App() {
       hasBeenRejectedRef.current = false;
       setIsRejected(false);
     });
-
     socket.on("group:status", (status) => {
       setGroupExists(status.hasHost);
       setHostUsername(status.hostUsername);
     });
-
-    socket.on("users:update", (usersList) => {
-      setUsers(usersList);
-    });
-
-    socket.on("typing:update", (typingList) => {
-      setTypingUsers(typingList.filter((u) => u !== currentUser));
-    });
-
+    socket.on("users:update", (usersList) => setUsers(usersList));
+    socket.on("typing:update", (typingList) =>
+      setTypingUsers(typingList.filter((u) => u !== currentUser)),
+    );
     socket.on("join:request", (request) => {
       setJoinRequests((prev) => [
         ...prev,
@@ -77,20 +72,17 @@ function App() {
         },
       ]);
     });
-
-    socket.on("request:handled", ({ socketId, action }) => {
+    socket.on("request:handled", ({ socketId }) => {
       setJoinRequests((prev) =>
-        prev.filter((req) => req.socketId !== socketId)
+        prev.filter((req) => req.socketId !== socketId),
       );
     });
-
     socket.on("join:pending", (data) => {
       setIsPending(true);
       setCurrentUser(data.username);
       setJoinError(data.message);
       setIsRejected(false);
     });
-
     socket.on("join:rejected", (data) => {
       hasBeenRejectedRef.current = true;
       setIsRejected(true);
@@ -100,7 +92,6 @@ function App() {
       setJoinError(data.message || "Host rejected your join request");
       setCurrentUser("");
     });
-
     socket.on("join:alert", (data) => {
       const alertId = Date.now();
       setHostAlerts((prev) => [
@@ -112,12 +103,11 @@ function App() {
           type: data.type || "info",
         },
       ]);
-
-      setTimeout(() => {
-        setHostAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
-      }, 3000);
+      setTimeout(
+        () => setHostAlerts((prev) => prev.filter((a) => a.id !== alertId)),
+        3000,
+      );
     });
-
     socket.on("group:reset", (data) => {
       setJoinError(`Host (${data.hostUsername}) disconnected. Group closed.`);
       setIsJoined(false);
@@ -134,7 +124,6 @@ function App() {
       setShowPasswordField(false);
       setHostAlerts([]);
     });
-
     return () => {
       if (socketUsRef.current) socketUsRef.current.disconnect();
     };
@@ -143,12 +132,8 @@ function App() {
   useEffect(() => {
     const socket = socketUsRef.current;
     if (!socket) return;
-
     socket.on("join:success", ({ username, isHost, message }) => {
-      if (hasBeenRejectedRef.current) {
-        return;
-      }
-
+      if (hasBeenRejectedRef.current) return;
       setJoinError("");
       setIsJoined(true);
       setIsPending(false);
@@ -157,7 +142,6 @@ function App() {
       setCurrentUser(username);
       setIsHost(isHost);
       setShowPasswordField(false);
-
       setMessages((prev) => [
         ...prev,
         {
@@ -172,7 +156,6 @@ function App() {
         },
       ]);
     });
-
     socket.on("join:error", (data) => {
       if (data.message === "Host rejected your join request") {
         setIsRejected(true);
@@ -184,7 +167,6 @@ function App() {
       setIsRejected(false);
       setShowPasswordField(false);
     });
-
     return () => {
       socket.off("join:success");
       socket.off("join:error");
@@ -193,20 +175,13 @@ function App() {
 
   useEffect(() => {
     const socket = socketUsRef.current;
-
     socket.on("message:new", (msg) => {
       setMessages((prev) => [
         ...prev,
-        {
-          ...msg,
-          sender: msg.sender === socket.id ? "me" : "other",
-        },
+        { ...msg, sender: msg.sender === socket.id ? "me" : "other" },
       ]);
     });
-
-    return () => {
-      socket.off("message:new");
-    };
+    return () => socket.off("message:new");
   }, []);
 
   useEffect(() => {
@@ -216,32 +191,22 @@ function App() {
   const handleUsernameSubmit = (e) => {
     e.preventDefault();
     const user = username.trim();
-
     if (!user) {
       setJoinError("Username is required");
       return;
     }
-
     if (user.length < 3) {
-      setJoinError("Username must be at least 3 characters long");
+      setJoinError("Username must be at least 3 characters");
       return;
     }
-
-    const validPattern = /^[a-zA-Z0-9]+$/;
-    if (!validPattern.test(user)) {
-      setJoinError("Username can only contain letters and numbers");
+    if (!/^[a-zA-Z0-9]+$/.test(user)) {
+      setJoinError("Letters and numbers only");
       return;
     }
-
     setJoinError("");
     setCurrentUser(user);
-
-    if (groupExists) {
-      setShowPasswordField(true);
-    } else {
-      setShowPasswordField(true);
-      setIsUsernameSet(true);
-    }
+    setShowPasswordField(true);
+    if (!groupExists) setIsUsernameSet(true);
   };
 
   const handleSendRequest = () => {
@@ -249,53 +214,40 @@ function App() {
       setJoinError("Username is required");
       return;
     }
-
-    const user = username.trim();
     setJoinError("");
     setIsUsernameSet(true);
-    setCurrentUser(user);
-
+    setCurrentUser(username.trim());
     socketUsRef.current.emit("joinWithPassword", {
-      username: user,
+      username: username.trim(),
       password: "",
     });
   };
 
   const handleJoinWithPassword = (e) => {
     e.preventDefault();
-
     if (isRejected || hasBeenRejectedRef.current) {
-      setJoinError(
-        "You were rejected from joining this group. Please refresh the page to try again."
-      );
+      setJoinError("You were rejected. Please refresh to try again.");
       return;
     }
-
     const user = username.trim();
     const pass = password.trim();
-
     if (!user || !pass) {
       setJoinError("Username and password required");
       return;
     }
-
     if (user.length < 3) {
-      setJoinError("Username must be at least 3 characters long");
+      setJoinError("Username must be at least 3 characters");
       return;
     }
-
-    const validPattern = /^[a-zA-Z0-9]+$/;
-    if (!validPattern.test(user)) {
-      setJoinError("Username can only contain letters and numbers");
+    if (!/^[a-zA-Z0-9]+$/.test(user)) {
+      setJoinError("Letters and numbers only");
       return;
     }
-
     setJoinError("");
     setIsUsernameSet(true);
     setCurrentUser(user);
     setIsRejected(false);
     hasBeenRejectedRef.current = false;
-
     socketUsRef.current.emit("joinWithPassword", {
       username: user,
       password: pass,
@@ -303,21 +255,12 @@ function App() {
   };
 
   const handleRequestAction = (socketId, action) => {
-    socketUsRef.current.emit("handleJoinRequest", {
-      socketId,
-      action,
-    });
+    socketUsRef.current.emit("handleJoinRequest", { socketId, action });
     setJoinRequests((prev) => prev.filter((req) => req.socketId !== socketId));
   };
-
-  const handleDismissRequest = (socketId) => {
+  const handleDismissRequest = (socketId) =>
     setJoinRequests((prev) => prev.filter((req) => req.socketId !== socketId));
-  };
-
-  const handleResetForm = () => {
-    window.location.reload();
-  };
-
+  const handleResetForm = () => window.location.reload();
   const handleBackToUsername = () => {
     setShowPasswordField(false);
     setPassword("");
@@ -333,16 +276,16 @@ function App() {
     }
     socketUsRef.current.emit("typing", currentUser);
     clearTimeout(typingTimeout.current);
-    typingTimeout.current = setTimeout(() => {
-      socketUsRef.current.emit("stopTyping", currentUser);
-    }, 1500);
+    typingTimeout.current = setTimeout(
+      () => socketUsRef.current.emit("stopTyping", currentUser),
+      1500,
+    );
   };
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
-
-    const message = {
+    socketUsRef.current.emit("sendMessage", {
       id: Date.now(),
       text: newMessage,
       sender: socketUsRef.current.id,
@@ -351,70 +294,82 @@ function App() {
         hour: "2-digit",
         minute: "2-digit",
       }),
-    };
-
-    socketUsRef.current.emit("sendMessage", message);
+    });
     setNewMessage("");
   };
 
   if (!isJoined || isRejected || hasBeenRejectedRef.current) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-[#0c1317] to-[#202c33] font-ember">
-        <div className="bg-[#2a3942] p-8 rounded-2xl shadow-2xl max-w-md w-full mx-4">
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 rounded-full bg-teal-600 flex items-center justify-center mx-auto mb-4">
-              {groupExists ? (
-                <Lock className="w-10 h-10 text-white" />
-              ) : (
-                <Shield className="w-10 h-10 text-white" />
-              )}
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-2 font-ember-heavy">
-              {groupExists ? "Join Group" : "Create Group"}
-            </h1>
-            <p className="text-gray-300 font-ember-light">
-              {groupExists
-                ? `Group created by ${hostUsername}. Enter password or request access.`
-                : "Be the first to create the group"}
-            </p>
-            {joinError && (
-              <p
-                className={`text-sm mt-2 p-3 rounded-lg font-ember-medium ${
-                  isPending
-                    ? "text-yellow-400 bg-yellow-900/30 border border-yellow-700/50"
-                    : isRejected
-                    ? "text-red-400 bg-red-900/30 border border-red-700/50"
-                    : "text-red-400 bg-red-900/30 border border-red-700/50"
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#07090d] px-4 py-10">
+        <div className="lobby-grid pointer-events-none absolute inset-0" />
+
+        <div className="orb orb-green pointer-events-none absolute" />
+        <div className="orb orb-amber pointer-events-none absolute" />
+
+        <div className="lobby-fadein relative z-10 w-full max-w-sm">
+          <div className="rounded-2xl border border-white/[0.07] bg-[#0d1520] p-8 shadow-[0_32px_80px_rgba(0,0,0,0.65)]">
+            <div className="mb-6 flex justify-center">
+              <div
+                className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${
+                  groupExists
+                    ? "border-amber-400/25 bg-amber-400/10 text-amber-400 shadow-[0_0_28px_rgba(245,158,11,0.12)]"
+                    : "border-emerald-400/25 bg-emerald-400/10 text-emerald-400 icon-glow-green shadow-[0_0_28px_rgba(16,185,129,0.12)]"
                 }`}
               >
-                {joinError}
-              </p>
-            )}
-          </div>
-
-          {!showPasswordField ? (
-            <form onSubmit={handleUsernameSubmit} className="space-y-6">
-              <div>
-                <label className="block text-gray-300 mb-2 text-sm font-ember-medium">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your username"
-                  className="w-full bg-[#202c33] text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-500 font-ember"
-                  autoFocus
-                  disabled={
-                    isPending || isRejected || hasBeenRejectedRef.current
-                  }
-                />
-                <p className="text-gray-400 text-xs mt-2 font-ember-light">
-                  Only letters and numbers, min 3 characters
-                </p>
+                {groupExists ? (
+                  <Lock className="h-7 w-7" />
+                ) : (
+                  <Shield className="h-7 w-7" />
+                )}
               </div>
+            </div>
 
-              <div className="space-y-3">
+            <div className="mb-7 text-center">
+              <h1 className="font-syne mb-1.5 text-2xl font-extrabold tracking-tight text-white">
+                {groupExists ? "Join Room" : "Create Room"}
+              </h1>
+              <p className="text-sm text-slate-500">
+                {groupExists
+                  ? `Hosted by ${hostUsername}`
+                  : "You'll become the host"}
+              </p>
+            </div>
+
+            {joinError && (
+              <div
+                className={`mb-5 flex items-start gap-2.5 rounded-xl border px-3.5 py-3 text-sm leading-relaxed lobby-alert-in ${
+                  isPending
+                    ? "border-amber-500/20 bg-amber-500/8 text-amber-300"
+                    : "border-red-500/20 bg-red-500/8 text-red-300"
+                }`}
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{joinError}</span>
+              </div>
+            )}
+
+            {!showPasswordField ? (
+              <form onSubmit={handleUsernameSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-widest text-slate-500">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="e.g. Alex42"
+                    autoFocus
+                    disabled={
+                      isPending || isRejected || hasBeenRejectedRef.current
+                    }
+                    className="w-full rounded-xl border border-white/8 bg-[#111d2b] px-4 py-3 text-sm text-white placeholder-slate-700 outline-none transition-all duration-200 focus:border-emerald-500/35 focus:ring-2 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  />
+                  <p className="text-[11px] text-slate-700">
+                    Letters &amp; numbers · min 3 chars
+                  </p>
+                </div>
+
                 <button
                   type="submit"
                   disabled={
@@ -423,44 +378,46 @@ function App() {
                     isRejected ||
                     hasBeenRejectedRef.current
                   }
-                  className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-ember-medium transition-all"
+                  className={`cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+                    groupExists
+                      ? "bg-amber-500 hover:bg-amber-400 shadow-[0_4px_20px_rgba(245,158,11,0.3)] hover:shadow-[0_6px_30px_rgba(245,158,11,0.4)]"
+                      : "bg-emerald-500 hover:bg-emerald-400 shadow-[0_4px_20px_rgba(16,185,129,0.28)] hover:shadow-[0_6px_30px_rgba(16,185,129,0.4)]"
+                  }`}
                 >
-                  {groupExists
-                    ? "Continue to Join"
-                    : "Continue to Create Group"}
+                  Continue <span className="btn-arrow">→</span>
                 </button>
 
                 {(isRejected || hasBeenRejectedRef.current) && (
                   <button
                     type="button"
                     onClick={handleResetForm}
-                    className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-ember-medium transition-all"
+                    className="w-full rounded-xl border border-white/[0.07] py-3 text-sm font-medium text-slate-500 transition hover:border-white/12 hover:bg-white/3 hover:text-slate-300"
                   >
-                    Refresh Page to Try Again
+                    Refresh &amp; Try Again
                   </button>
                 )}
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleJoinWithPassword} className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-300 text-sm font-ember-light">Username</p>
-                    <p className="text-white font-ember-medium">{username}</p>
+              </form>
+            ) : (
+              <form onSubmit={handleJoinWithPassword} className="space-y-4">
+                <div className="flex items-center justify-between rounded-xl border border-white/6 bg-[#111d2b] px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 online-pulse" />
+                    <span className="text-sm font-medium text-white">
+                      {username}
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={handleBackToUsername}
-                    className="text-teal-400 hover:text-teal-300 text-sm font-ember-medium"
+                    className="flex items-center gap-1 text-xs font-semibold text-emerald-400 transition hover:text-emerald-300"
                   >
-                    Change
+                    <ArrowLeft className="h-3 w-3" /> Change
                   </button>
                 </div>
 
-                <div>
-                  <label className="block text-gray-300 mb-2 text-sm font-ember-medium">
-                    {groupExists ? "Password (Optional)" : "Create Password"}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-widest text-slate-500">
+                    {groupExists ? "Password" : "Set Password"}
                   </label>
                   <input
                     type="password"
@@ -468,23 +425,21 @@ function App() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={
                       groupExists
-                        ? "Enter group password to join directly"
-                        : "Set group password"
+                        ? "Enter to join directly…"
+                        : "Choose a group password"
                     }
-                    className="w-full bg-[#202c33] text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-500 font-ember"
                     disabled={
                       isPending || isRejected || hasBeenRejectedRef.current
                     }
+                    className="w-full rounded-xl border border-white/8 bg-[#111d2b] px-4 py-3 text-sm text-white placeholder-slate-700 outline-none transition-all duration-200 focus:border-emerald-500/35 focus:ring-2 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                   />
-                  <p className="text-gray-400 text-xs mt-2 font-ember-light">
+                  <p className="text-[11px] text-slate-700">
                     {groupExists
-                      ? "Leave empty to send join request. Correct password = join directly."
-                      : "This will be the password for your group"}
+                      ? "Leave empty to send a join request"
+                      : "Members will use this to enter"}
                   </p>
                 </div>
-              </div>
 
-              <div className="space-y-3">
                 {groupExists && !password.trim() ? (
                   <button
                     type="button"
@@ -492,9 +447,9 @@ function App() {
                     disabled={
                       isPending || isRejected || hasBeenRejectedRef.current
                     }
-                    className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-ember-medium transition-all"
+                    className="btn-lift flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-white shadow-[0_4px_20px_rgba(245,158,11,0.28)] transition hover:bg-amber-400 hover:shadow-[0_6px_28px_rgba(245,158,11,0.4)] disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Send Join Request
+                    <UserPlus className="h-4 w-4" /> Send Join Request
                   </button>
                 ) : (
                   <button
@@ -505,9 +460,14 @@ function App() {
                       isRejected ||
                       hasBeenRejectedRef.current
                     }
-                    className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-ember-medium transition-all"
+                    className={`cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+                      groupExists
+                        ? "bg-amber-500 hover:bg-amber-400 shadow-[0_4px_20px_rgba(245,158,11,0.28)]"
+                        : "bg-emerald-500 hover:bg-emerald-400 shadow-[0_4px_20px_rgba(16,185,129,0.28)]"
+                    }`}
                   >
-                    {groupExists ? "Join Group" : "Create Group"}
+                    {groupExists ? "Join Room" : "Create Room"}{" "}
+                    <span className="btn-arrow">→</span>
                   </button>
                 )}
 
@@ -515,24 +475,20 @@ function App() {
                   <button
                     type="button"
                     onClick={handleResetForm}
-                    className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-ember-medium transition-all"
+                    className="w-full rounded-xl border border-white/[0.07] py-3 text-sm font-medium text-slate-500 transition hover:border-white/12 hover:bg-white/3 hover:text-slate-300"
                   >
-                    Refresh Page to Try Again
+                    Refresh &amp; Try Again
                   </button>
                 )}
-              </div>
-            </form>
-          )}
+              </form>
+            )}
 
-          <div className="mt-8 pt-6 border-t border-gray-700">
-            <p className="text-gray-400 text-sm text-center font-ember-light">
+            <p className="mt-6 border-t border-white/5 pt-5 text-center text-[11px] leading-relaxed text-slate-700">
               {isRejected || hasBeenRejectedRef.current
-                ? "Your join request was rejected by the host. You cannot join this group."
+                ? "Your request was declined by the host."
                 : groupExists
-                ? !showPasswordField
-                  ? "Enter your username to continue"
-                  : "Leave password empty to send request, or enter password to join directly"
-                : "You'll become the host and manage join requests."}
+                  ? "Use a password to enter immediately, or request access."
+                  : "As host you approve & manage all join requests."}
             </p>
           </div>
         </div>
@@ -541,22 +497,20 @@ function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#0c1317] font-ember">
+    <div className="flex h-dvh flex-col overflow-hidden bg-[#07090d]">
       {isHost && hostAlerts.length > 0 && (
-        <div className="fixed top-4 right-4 z-50 space-y-3 max-w-sm no-scrollbar">
-          {hostAlerts.map((alert) => (
+        <div className="fixed right-4 top-4 z-50 flex flex-col gap-2 w-72 max-w-[calc(100vw-2rem)]">
+          {hostAlerts.map((a) => (
             <div
-              key={alert.id}
-              className="bg-blue-900/90 backdrop-blur-sm border border-blue-700/70 rounded-lg shadow-2xl p-4 animate-fadeIn"
+              key={a.id}
+              className="toast-in flex items-start gap-3 rounded-xl border border-sky-500/20 bg-[#0c1e30]/95 px-4 py-3.5 shadow-2xl backdrop-blur-xl"
             >
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-blue-300 font-ember-medium mb-1">
-                    {alert.username} wants to join
-                  </p>
-                  <p className="text-white text-sm font-ember">{alert.message}</p>
-                </div>
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0text-sky-400" />
+              <div>
+                <p className="text-xs font-semibold text-sky-300">
+                  {a.username} wants to join
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">{a.message}</p>
               </div>
             </div>
           ))}
@@ -564,256 +518,237 @@ function App() {
       )}
 
       {isHost && joinRequests.length > 0 && (
-        <div className="fixed top-24 right-4 z-50 space-y-3 max-w-sm no-scrollbar">
-          {joinRequests.map((request) => (
+        <div className="fixed right-4 top-18 z-50 flex flex-col gap-2.5 w-72 max-w-[calc(100vw-2rem)]">
+          {joinRequests.map((req) => (
             <div
-              key={request.id}
-              className="bg-yellow-900/90 backdrop-blur-sm border border-yellow-700/70 rounded-lg shadow-2xl p-4 animate-fadeIn"
+              key={req.id}
+              className="toast-in rounded-xl border border-amber-500/18 bg-[#130f05]/95 p-4 shadow-2xl backdrop-blur-xl"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <UserPlus className="w-5 h-5 text-yellow-400" />
-                  <p className="text-yellow-300 font-ember-medium">Join Request</p>
+              <div className="mb-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <UserPlus className="h-3.5 w-3.5 text-amber-400" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                    Join Request
+                  </span>
                 </div>
                 <button
-                  onClick={() => handleDismissRequest(request.socketId)}
-                  className="text-gray-400 hover:text-white"
+                  onClick={() => handleDismissRequest(req.socketId)}
+                  className="rounded p-0.5 text-slate-600 transition hover:text-slate-300"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-
-              <p className="text-white mb-4 font-ember">
-                <span className="font-ember-bold text-teal-300">
-                  {request.username}
-                </span>{" "}
-                wants to join the group
+              <p className="font-syne text-sm font-bold text-white">
+                {req.username}
               </p>
-
+              <p className="mb-3.5 mt-0.5 text-xs text-slate-500">
+                wants to join the room
+              </p>
               <div className="flex gap-2">
                 <button
-                  onClick={() =>
-                    handleRequestAction(request.socketId, "approve")
-                  }
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2 font-ember-medium"
+                  onClick={() => handleRequestAction(req.socketId, "approve")}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 py-2 text-xs font-semibold text-emerald-400 transition hover:bg-emerald-500/20"
                 >
-                  <Check className="w-4 h-4" />
-                  Allow
+                  <Check className="h-3.5 w-3.5" /> Allow
                 </button>
                 <button
-                  onClick={() =>
-                    handleRequestAction(request.socketId, "reject")
-                  }
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2 font-ember-medium"
+                  onClick={() => handleRequestAction(req.socketId, "reject")}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/8 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/15"
                 >
-                  <X className="w-4 h-4" />
-                  Reject
+                  <X className="h-3.5 w-3.5" /> Reject
                 </button>
               </div>
-
-              <div className="text-xs text-gray-300 text-right mt-3 font-ember-light">
-                {new Date(request.timestamp).toLocaleTimeString([], {
+              <p className="mt-2.5 text-right text-[10px] text-slate-700">
+                {new Date(req.timestamp).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
-              </div>
+              </p>
             </div>
           ))}
         </div>
       )}
 
-      <div className="flex items-center justify-between p-4 bg-[#202c33] text-white">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                isHost ? "bg-purple-600" : "bg-teal-600"
-              }`}
-            >
-              {isHost ? (
-                <Shield className="w-5 h-5" />
-              ) : (
-                <Users className="w-5 h-5" />
-              )}
-            </div>
-            <span className="absolute -bottom-1 -right-1 bg-green-500 text-xs w-5 h-5 rounded-full flex items-center justify-center font-ember-bold">
-              {users.length}
-            </span>
+      <header className="flex shrink-0items-center justify-between border-b border-white/5 bg-[#0b1219] px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-3">
+          <div
+            className={`flex h-9 w-9 shrink-0items-center justify-center rounded-xl border ${
+              isHost
+                ? "border-amber-500/30 bg-amber-500/8 text-amber-400"
+                : "border-emerald-500/30 bg-emerald-500/8 text-emerald-400"
+            }`}
+          >
+            {isHost ? (
+              <Shield className="h-4 w-4" />
+            ) : (
+              <Users className="h-4 w-4" />
+            )}
           </div>
           <div>
-            <h2 className="font-ember-bold">Group Chat</h2>
-            <p className="text-sm text-green-400 font-ember-medium whitespace-nowrap">
-              {users.length} online • {currentUser} {isHost && "(Host)"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          {isHost && (joinRequests.length > 0 || hostAlerts.length > 0) && (
-            <div className="relative">
-              <div className="px-3 py-1 bg-yellow-600 text-white rounded-full text-sm font-ember-medium flex items-center gap-2">
-                <UserPlus className="w-4 h-4" />
-                {joinRequests.length} request{joinRequests.length !== 1 && "s"}
-              </div>
-              {hostAlerts.length > 0 && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full text-xs flex items-center justify-center font-ember-bold">
-                  {hostAlerts.length}
-                </div>
+            <h2 className="font-syne text-sm font-extrabold tracking-tight text-white">
+              Group Room
+            </h2>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-500">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 online-pulse" />
+              <span>{users.length} online</span>
+              <span className="text-slate-700">·</span>
+              <span className="font-medium text-slate-300">{currentUser}</span>
+              {isHost && (
+                <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-widest text-amber-400">
+                  host
+                </span>
               )}
             </div>
-          )}
-          {isHost && (
-            <div className="flex items-center gap-2 text-sm text-gray-300 font-ember-medium">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              Host
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isHost && joinRequests.length > 0 && (
+            <div className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/8 px-2.5 py-1 text-[11px] font-semibold text-amber-400">
+              <UserPlus className="h-3 w-3" />
+              {joinRequests.length}
             </div>
           )}
-          <MoreVertical className="w-6 h-6 cursor-pointer hover:text-teal-400" />
+          <button className="rounded-lg p-1.5 text-slate-600 transition hover:bg-white/4 hover:text-white">
+            <MoreVertical className="h-5 w-5" />
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div className="bg-[#1c252b] px-4 py-2 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-4 text-white">
-          <span className="text-sm text-gray-300 whitespace-nowrap font-ember-light">
-            Online ({users.length}):
+      <div className="shrink-0border-b border-white/4 bg-[#09101a] px-4 py-2.5">
+        <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
+          <span className="shrink-0text-[10px] font-semibold uppercase tracking-widest text-slate-700">
+            Online
           </span>
-          <div className="flex items-center gap-2 no-scrollbar overflow-x-auto">
-            {users.map((user, index) => (
+          <span className="shrink-0text-slate-800">·</span>
+          <div className="flex items-center gap-1.5">
+            {users.map((user, i) => (
               <div
-                key={index}
-                className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+                key={i}
+                className={`flex shrink-0items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
                   user === currentUser
                     ? isHost
-                      ? "bg-purple-600/20"
-                      : "bg-teal-600/20"
-                    : "bg-[#2a3942]"
+                      ? "border-amber-500/20 bg-amber-500/8 text-amber-300"
+                      : "border-emerald-500/20 bg-emerald-500/8 text-emerald-300"
+                    : "border-white/5 bg-white/2 text-slate-500"
                 }`}
               >
                 <span
-                  className={`w-2 h-2 rounded-full ${
+                  className={`h-1.5 w-1.5 shrink-0rounded-full ${
                     user === currentUser
                       ? isHost
-                        ? "bg-purple-400"
-                        : "bg-teal-400"
-                      : "bg-green-400"
+                        ? "bg-amber-400 online-pulse"
+                        : "bg-emerald-400 online-pulse"
+                      : "bg-slate-600"
                   }`}
-                ></span>
-                <span className="text-sm font-ember-medium whitespace-nowrap">
-                  {user} {user === currentUser && isHost && "(Host)"}
-                  {user === currentUser && !isHost && "(You)"}
-                </span>
+                />
+                {user}
+                {user === currentUser && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">
+                    {isHost ? "host" : "you"}
+                  </span>
+                )}
               </div>
             ))}
           </div>
         </div>
 
         {typingUsers.length > 0 && (
-          <div className="mt-2 flex items-center gap-2 text-sm text-gray-300">
-            <span className="whitespace-nowrap font-ember-light">Typing:</span>
-            <div className="flex items-center gap-2 flex-wrap">
-              {typingUsers.map((user) => (
-                <div key={user} className="flex items-center gap-1">
-                  <span className="italic text-teal-300 font-ember-medium">{user}</span>
-                  <div className="flex items-center gap-1">
-                    <span className="w-1 h-1 bg-teal-400 rounded-full animate-pulse"></span>
-                    <span
-                      className="w-1 h-1 bg-teal-400 rounded-full animate-pulse"
-                      style={{ animationDelay: "0.2s" }}
-                    ></span>
-                    <span
-                      className="w-1 h-1 bg-teal-400 rounded-full animate-pulse"
-                      style={{ animationDelay: "0.4s" }}
-                    ></span>
-                  </div>
-                </div>
-              ))}
+          <div className="mt-2 flex items-center gap-2">
+            <div className="typing-dots flex items-center gap-0.5">
+              <span />
+              <span />
+              <span />
             </div>
+            <span className="text-[11px] italic text-slate-600">
+              {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"}{" "}
+              typing…
+            </span>
           </div>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0c1317] bg-opacity-95 no-scrollbar chat-messages-container">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${
-              msg.sender === "me" ? "justify-end" : "justify-start"
-            }`}
-          >
+      <div className="chat-bg flex-1 overflow-y-auto px-3 py-5 sm:px-5">
+        <div className="flex flex-col gap-1.5">
+          {messages.map((msg) => (
             <div
-              className={`max-w-xs lg:max-w-md rounded-lg p-3 ${
-                msg.sender === "me"
-                  ? "bg-[#005c4b] rounded-tr-none"
-                  : msg.sender === "system"
-                  ? "bg-[#1e3a5f] rounded-lg"
-                  : "bg-[#2a3942] rounded-tl-none"
-              }`}
+              key={msg.id}
+              className={`msg-in flex ${msg.sender === "me" ? "justify-end" : msg.sender === "system" ? "justify-center" : "justify-start"}`}
             >
-              {msg.sender !== "system" && msg.sender !== "me" && (
-                <p className="text-teal-300 text-xs font-ember-medium mb-1">
-                  {msg.username}
-                </p>
+              {msg.sender === "system" ? (
+                <div className="flex items-center gap-2 rounded-full border border-sky-500/15 bg-sky-500/6 px-4 py-1.5 text-[11px] text-sky-400/70">
+                  <span className="h-1 w-1 rounded-full bg-sky-500" />
+                  {msg.text}
+                </div>
+              ) : (
+                <div
+                  className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 sm:max-w-sm lg:max-w-md ${
+                    msg.sender === "me"
+                      ? "rounded-br-sm border border-emerald-900/35 bg-[#0b2d1d]"
+                      : "rounded-bl-sm border border-white/5 bg-[#101b28]"
+                  }`}
+                >
+                  {msg.sender !== "me" && (
+                    <span className="mb-1 block text-[11px] font-semibold text-emerald-400/90">
+                      {msg.username}
+                    </span>
+                  )}
+                  <p className="text-sm leading-relaxed text-slate-200">
+                    {msg.text}
+                  </p>
+                  <div className="mt-1.5 flex items-center justify-end gap-1">
+                    <span className="text-[10px] text-slate-700">
+                      {msg.time}
+                    </span>
+                    {msg.sender === "me" &&
+                      (msg.read ? (
+                        <CheckCheck className="h-3 w-3 text-emerald-400" />
+                      ) : (
+                        <Check className="h-3 w-3 text-slate-700" />
+                      ))}
+                  </div>
+                </div>
               )}
-              {msg.sender === "system" && (
-                <p className="text-blue-300 text-xs font-ember-medium mb-1">
-                  {msg.username}
-                </p>
-              )}
-              <p className="text-white font-ember">{msg.text}</p>
-              <div className="flex items-center justify-between gap-2 mt-1">
-                <span className="text-xs text-gray-300 font-ember-light">{msg.time}</span>
-                {msg.sender === "me" && (
-                  <span className="text-xs">
-                    {msg.read ? (
-                      <CheckCheck className="w-3 h-3 text-blue-400" />
-                    ) : (
-                      <Check className="w-3 h-3 text-gray-400" />
-                    )}
-                  </span>
-                )}
-              </div>
             </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
-      <div className="p-3 bg-[#202c33]">
-        <div className="flex items-center gap-2">
-          
-          <form
-            onSubmit={handleSendMessage}
-            className="flex items-center gap-2 flex-1"
+      <div className="shrink-0border-t border-white/5 bg-[#0b1219] px-3 py-3 sm:px-4">
+        <form
+          onSubmit={handleSendMessage}
+          className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#0f1d2b] px-3 py-1.5 transition-all duration-200 focus-within:border-emerald-500/30 focus-within:shadow-[0_0_0_3px_rgba(16,185,129,0.06)]"
+        >
+          <button
+            type="button"
+            className="shrink-0p-1.5 text-slate-700 transition hover:text-slate-400"
           >
+            <Smile className="h-5 w-5" />
+          </button>
+          <input
+            type="text"
+            value={newMessage}
+            onChange={handleTyping}
+            placeholder="Write a message…"
+            className="flex-1 min-w-0 bg-transparent py-2 text-sm text-slate-100 placeholder-slate-700 outline-none"
+          />
+          {newMessage.trim() ? (
+            <button
+              type="submit"
+              className="flex h-9 w-9 shrink-0items-center justify-center rounded-xl bg-emerald-500 text-white shadow-[0_3px_16px_rgba(16,185,129,0.38)] transition-all duration-150 hover:bg-emerald-400 hover:shadow-[0_5px_22px_rgba(16,185,129,0.5)] active:scale-90"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          ) : (
             <button
               type="button"
-              className="p-3 text-gray-400 hover:text-white"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/3 text-slate-600 transition hover:bg-white/6 hover:text-slate-400"
             >
-              <Smile className="w-6 h-6" />
+              <Mic className="h-4 w-4" />
             </button>
-            <input
-              type="text"
-              value={newMessage}
-              onChange={handleTyping}
-              placeholder={`Message in Group Chat...`}
-              className="flex-1 bg-[#2a3942] text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-teal-500 font-ember"
-            />
-            {newMessage.trim() ? (
-              <button
-                type="submit"
-                className="p-3 bg-teal-600 text-white rounded-full hover:bg-teal-700"
-              >
-                <Send className="w-6 h-6" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="p-3 bg-teal-600 text-white rounded-full hover:bg-teal-700"
-              >
-                <Mic className="w-6 h-6" />
-              </button>
-            )}
-          </form>
-        </div>
+          )}
+        </form>
       </div>
     </div>
   );
