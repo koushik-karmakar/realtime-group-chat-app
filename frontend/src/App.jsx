@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send,
   Mic,
@@ -14,8 +14,9 @@ import {
   AlertCircle,
   ArrowLeft,
 } from "lucide-react";
+import EmojiPicker from "emoji-picker-react";
 import { wsConnection } from "./ws.jsx";
-
+import "./App.css";
 function App() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -35,14 +36,57 @@ function App() {
   const [isRejected, setIsRejected] = useState(false);
   const [showPasswordField, setShowPasswordField] = useState(false);
   const [hostAlerts, setHostAlerts] = useState([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const messagesEndRef = useRef(null);
   const socketUsRef = useRef(null);
   const hasBeenRejectedRef = useRef(false);
+  const inputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
+  const typingTimeout = useRef(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+
+  const handleEmojiClick = useCallback(
+    (emojiData) => {
+      const emoji = emojiData.emoji;
+      const input = inputRef.current;
+      if (!input) {
+        setNewMessage((prev) => prev + emoji);
+        return;
+      }
+      const start = input.selectionStart ?? newMessage.length;
+      const end = input.selectionEnd ?? newMessage.length;
+      const next = newMessage.slice(0, start) + emoji + newMessage.slice(end);
+      setNewMessage(next);
+      requestAnimationFrame(() => {
+        input.focus();
+        const pos = start + emoji.length;
+        input.setSelectionRange(pos, pos);
+      });
+    },
+    [newMessage],
+  );
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handler = (e) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(e.target) &&
+        !e.target.closest(".emoji-trigger-btn")
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, [showEmojiPicker]);
 
   useEffect(() => {
     socketUsRef.current = wsConnection();
@@ -53,30 +97,28 @@ function App() {
       hasBeenRejectedRef.current = false;
       setIsRejected(false);
     });
-    socket.on("group:status", (status) => {
-      setGroupExists(status.hasHost);
-      setHostUsername(status.hostUsername);
+    socket.on("group:status", (s) => {
+      setGroupExists(s.hasHost);
+      setHostUsername(s.hostUsername);
     });
-    socket.on("users:update", (usersList) => setUsers(usersList));
-    socket.on("typing:update", (typingList) =>
-      setTypingUsers(typingList.filter((u) => u !== currentUser)),
+    socket.on("users:update", (list) => setUsers(list));
+    socket.on("typing:update", (list) =>
+      setTypingUsers(list.filter((u) => u !== currentUser)),
     );
-    socket.on("join:request", (request) => {
-      setJoinRequests((prev) => [
-        ...prev,
+    socket.on("join:request", (req) =>
+      setJoinRequests((p) => [
+        ...p,
         {
-          id: `request-${request.socketId}`,
-          socketId: request.socketId,
-          username: request.username,
-          timestamp: request.timestamp,
+          id: `request-${req.socketId}`,
+          socketId: req.socketId,
+          username: req.username,
+          timestamp: req.timestamp,
         },
-      ]);
-    });
-    socket.on("request:handled", ({ socketId }) => {
-      setJoinRequests((prev) =>
-        prev.filter((req) => req.socketId !== socketId),
-      );
-    });
+      ]),
+    );
+    socket.on("request:handled", ({ socketId }) =>
+      setJoinRequests((p) => p.filter((r) => r.socketId !== socketId)),
+    );
     socket.on("join:pending", (data) => {
       setIsPending(true);
       setCurrentUser(data.username);
@@ -93,18 +135,13 @@ function App() {
       setCurrentUser("");
     });
     socket.on("join:alert", (data) => {
-      const alertId = Date.now();
-      setHostAlerts((prev) => [
-        ...prev,
-        {
-          id: alertId,
-          username: data.username,
-          message: data.message,
-          type: data.type || "info",
-        },
+      const id = Date.now();
+      setHostAlerts((p) => [
+        ...p,
+        { id, username: data.username, message: data.message },
       ]);
       setTimeout(
-        () => setHostAlerts((prev) => prev.filter((a) => a.id !== alertId)),
+        () => setHostAlerts((p) => p.filter((a) => a.id !== id)),
         3000,
       );
     });
@@ -142,8 +179,8 @@ function App() {
       setCurrentUser(username);
       setIsHost(isHost);
       setShowPasswordField(false);
-      setMessages((prev) => [
-        ...prev,
+      setMessages((p) => [
+        ...p,
         {
           id: Date.now(),
           text: message,
@@ -175,12 +212,12 @@ function App() {
 
   useEffect(() => {
     const socket = socketUsRef.current;
-    socket.on("message:new", (msg) => {
-      setMessages((prev) => [
-        ...prev,
+    socket.on("message:new", (msg) =>
+      setMessages((p) => [
+        ...p,
         { ...msg, sender: msg.sender === socket.id ? "me" : "other" },
-      ]);
-    });
+      ]),
+    );
     return () => socket.off("message:new");
   }, []);
 
@@ -256,10 +293,10 @@ function App() {
 
   const handleRequestAction = (socketId, action) => {
     socketUsRef.current.emit("handleJoinRequest", { socketId, action });
-    setJoinRequests((prev) => prev.filter((req) => req.socketId !== socketId));
+    setJoinRequests((p) => p.filter((r) => r.socketId !== socketId));
   };
   const handleDismissRequest = (socketId) =>
-    setJoinRequests((prev) => prev.filter((req) => req.socketId !== socketId));
+    setJoinRequests((p) => p.filter((r) => r.socketId !== socketId));
   const handleResetForm = () => window.location.reload();
   const handleBackToUsername = () => {
     setShowPasswordField(false);
@@ -267,7 +304,6 @@ function App() {
     setJoinError("");
   };
 
-  const typingTimeout = useRef(null);
   const handleTyping = (e) => {
     setNewMessage(e.target.value);
     if (!e.target.value.trim()) {
@@ -302,7 +338,6 @@ function App() {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#07090d] px-4 py-10">
         <div className="lobby-grid pointer-events-none absolute inset-0" />
-
         <div className="orb orb-green pointer-events-none absolute" />
         <div className="orb orb-amber pointer-events-none absolute" />
 
@@ -337,7 +372,7 @@ function App() {
 
             {joinError && (
               <div
-                className={`mb-5 flex items-start gap-2.5 rounded-xl border px-3.5 py-3 text-sm leading-relaxed lobby-alert-in ${
+                className={`lobby-alert-in mb-5 flex items-start gap-2.5 rounded-xl border px-3.5 py-3 text-sm leading-relaxed ${
                   isPending
                     ? "border-amber-500/20 bg-amber-500/8 text-amber-300"
                     : "border-red-500/20 bg-red-500/8 text-red-300"
@@ -363,13 +398,12 @@ function App() {
                     disabled={
                       isPending || isRejected || hasBeenRejectedRef.current
                     }
-                    className="w-full rounded-xl border border-white/8 bg-[#111d2b] px-4 py-3 text-sm text-white placeholder-slate-700 outline-none transition-all duration-200 focus:border-emerald-500/35 focus:ring-2 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="w-full rounded-xl border border-white/8 bg-[#111d2b] px-4 py-3 text-sm text-white placeholder-slate-700 outline-none transition-all focus:border-emerald-500/35 focus:ring-2 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                   />
                   <p className="text-[11px] text-slate-700">
                     Letters &amp; numbers · min 3 chars
                   </p>
                 </div>
-
                 <button
                   type="submit"
                   disabled={
@@ -378,20 +412,19 @@ function App() {
                     isRejected ||
                     hasBeenRejectedRef.current
                   }
-                  className={`cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+                  className={`cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
                     groupExists
-                      ? "bg-amber-500 hover:bg-amber-400 shadow-[0_4px_20px_rgba(245,158,11,0.3)] hover:shadow-[0_6px_30px_rgba(245,158,11,0.4)]"
-                      : "bg-emerald-500 hover:bg-emerald-400 shadow-[0_4px_20px_rgba(16,185,129,0.28)] hover:shadow-[0_6px_30px_rgba(16,185,129,0.4)]"
+                      ? "bg-amber-500 hover:bg-amber-400 shadow-[0_4px_20px_rgba(245,158,11,0.3)]"
+                      : "bg-emerald-500 hover:bg-emerald-400 shadow-[0_4px_20px_rgba(16,185,129,0.28)]"
                   }`}
                 >
                   Continue <span className="btn-arrow">→</span>
                 </button>
-
                 {(isRejected || hasBeenRejectedRef.current) && (
                   <button
                     type="button"
                     onClick={handleResetForm}
-                    className="w-full rounded-xl border border-white/[0.07] py-3 text-sm font-medium text-slate-500 transition hover:border-white/12 hover:bg-white/3 hover:text-slate-300"
+                    className="w-full rounded-xl border border-white/[0.07] py-3 text-sm font-medium text-slate-500 transition hover:bg-white/3 hover:text-slate-300"
                   >
                     Refresh &amp; Try Again
                   </button>
@@ -401,7 +434,7 @@ function App() {
               <form onSubmit={handleJoinWithPassword} className="space-y-4">
                 <div className="flex items-center justify-between rounded-xl border border-white/6 bg-[#111d2b] px-4 py-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 online-pulse" />
+                    <span className="online-pulse inline-block h-2 w-2 rounded-full bg-emerald-400" />
                     <span className="text-sm font-medium text-white">
                       {username}
                     </span>
@@ -414,7 +447,6 @@ function App() {
                     <ArrowLeft className="h-3 w-3" /> Change
                   </button>
                 </div>
-
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-semibold uppercase tracking-widest text-slate-500">
                     {groupExists ? "Password" : "Set Password"}
@@ -431,7 +463,7 @@ function App() {
                     disabled={
                       isPending || isRejected || hasBeenRejectedRef.current
                     }
-                    className="w-full rounded-xl border border-white/8 bg-[#111d2b] px-4 py-3 text-sm text-white placeholder-slate-700 outline-none transition-all duration-200 focus:border-emerald-500/35 focus:ring-2 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="w-full rounded-xl border border-white/8 bg-[#111d2b] px-4 py-3 text-sm text-white placeholder-slate-700 outline-none transition-all focus:border-emerald-500/35 focus:ring-2 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                   />
                   <p className="text-[11px] text-slate-700">
                     {groupExists
@@ -439,7 +471,6 @@ function App() {
                       : "Members will use this to enter"}
                   </p>
                 </div>
-
                 {groupExists && !password.trim() ? (
                   <button
                     type="button"
@@ -447,7 +478,7 @@ function App() {
                     disabled={
                       isPending || isRejected || hasBeenRejectedRef.current
                     }
-                    className="btn-lift flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-white shadow-[0_4px_20px_rgba(245,158,11,0.28)] transition hover:bg-amber-400 hover:shadow-[0_6px_28px_rgba(245,158,11,0.4)] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-white shadow-[0_4px_20px_rgba(245,158,11,0.28)] hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <UserPlus className="h-4 w-4" /> Send Join Request
                   </button>
@@ -460,7 +491,7 @@ function App() {
                       isRejected ||
                       hasBeenRejectedRef.current
                     }
-                    className={`cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+                    className={`cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
                       groupExists
                         ? "bg-amber-500 hover:bg-amber-400 shadow-[0_4px_20px_rgba(245,158,11,0.28)]"
                         : "bg-emerald-500 hover:bg-emerald-400 shadow-[0_4px_20px_rgba(16,185,129,0.28)]"
@@ -470,12 +501,11 @@ function App() {
                     <span className="btn-arrow">→</span>
                   </button>
                 )}
-
                 {(isRejected || hasBeenRejectedRef.current) && (
                   <button
                     type="button"
                     onClick={handleResetForm}
-                    className="w-full rounded-xl border border-white/[0.07] py-3 text-sm font-medium text-slate-500 transition hover:border-white/12 hover:bg-white/3 hover:text-slate-300"
+                    className="w-full rounded-xl border border-white/[0.07] py-3 text-sm font-medium text-slate-500 transition hover:bg-white/3 hover:text-slate-300"
                   >
                     Refresh &amp; Try Again
                   </button>
@@ -497,15 +527,15 @@ function App() {
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-[#07090d]">
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-[#07090d]">
       {isHost && hostAlerts.length > 0 && (
-        <div className="fixed right-4 top-4 z-50 flex flex-col gap-2 w-72 max-w-[calc(100vw-2rem)]">
+        <div className="fixed right-4 top-4 z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-2">
           {hostAlerts.map((a) => (
             <div
               key={a.id}
               className="toast-in flex items-start gap-3 rounded-xl border border-sky-500/20 bg-[#0c1e30]/95 px-4 py-3.5 shadow-2xl backdrop-blur-xl"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0text-sky-400" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
               <div>
                 <p className="text-xs font-semibold text-sky-300">
                   {a.username} wants to join
@@ -518,11 +548,11 @@ function App() {
       )}
 
       {isHost && joinRequests.length > 0 && (
-        <div className="fixed right-4 top-18 z-50 flex flex-col gap-2.5 w-72 max-w-[calc(100vw-2rem)]">
+        <div className="fixed right-4 top-18 z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-2.5">
           {joinRequests.map((req) => (
             <div
               key={req.id}
-              className="toast-in rounded-xl border border-amber-500/18 bg-[#130f05]/95 p-4 shadow-2xl backdrop-blur-xl"
+              className="toast-in rounded-xl border border-amber-500/20 bg-[#130f05]/95 p-4 shadow-2xl backdrop-blur-xl"
             >
               <div className="mb-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -569,10 +599,11 @@ function App() {
         </div>
       )}
 
-      <header className="flex shrink-0items-center justify-between border-b border-white/5 bg-[#0b1219] px-4 py-3 sm:px-5">
-        <div className="flex items-center gap-3">
+      {/* Fixed Header */}
+      <header className="shrink-0 flex items-center justify-between border-b border-white/5 bg-[#0b1219] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div
-            className={`flex h-9 w-9 shrink-0items-center justify-center rounded-xl border ${
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
               isHost
                 ? "border-amber-500/30 bg-amber-500/8 text-amber-400"
                 : "border-emerald-500/30 bg-emerald-500/8 text-emerald-400"
@@ -584,25 +615,26 @@ function App() {
               <Users className="h-4 w-4" />
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="font-syne text-sm font-extrabold tracking-tight text-white">
               Group Room
             </h2>
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-500">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 online-pulse" />
-              <span>{users.length} online</span>
+            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span className="online-pulse inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+              <span className="shrink-0">{users.length} online</span>
               <span className="text-slate-700">·</span>
-              <span className="font-medium text-slate-300">{currentUser}</span>
+              <span className="truncate font-medium text-slate-300">
+                {currentUser}
+              </span>
               {isHost && (
-                <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-widest text-amber-400">
+                <span className="shrink-0 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-widest text-amber-400">
                   host
                 </span>
               )}
             </div>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 pl-2">
           {isHost && joinRequests.length > 0 && (
             <div className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/8 px-2.5 py-1 text-[11px] font-semibold text-amber-400">
               <UserPlus className="h-3 w-3" />
@@ -615,46 +647,43 @@ function App() {
         </div>
       </header>
 
-      <div className="shrink-0border-b border-white/4 bg-[#09101a] px-4 py-2.5">
+      {/* Fixed Online Users Bar */}
+      <div className="shrink-0 border-b border-white/4 bg-[#09101a] px-4 py-2">
         <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
-          <span className="shrink-0text-[10px] font-semibold uppercase tracking-widest text-slate-700">
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-slate-700">
             Online
           </span>
-          <span className="shrink-0text-slate-800">·</span>
-          <div className="flex items-center gap-1.5">
-            {users.map((user, i) => (
-              <div
-                key={i}
-                className={`flex shrink-0items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+          {users.map((user, i) => (
+            <div
+              key={i}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                user === currentUser
+                  ? isHost
+                    ? "border-amber-500/20 bg-amber-500/8 text-amber-300"
+                    : "border-emerald-500/20 bg-emerald-500/8 text-emerald-300"
+                  : "border-white/5 bg-white/2 text-slate-500"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                   user === currentUser
                     ? isHost
-                      ? "border-amber-500/20 bg-amber-500/8 text-amber-300"
-                      : "border-emerald-500/20 bg-emerald-500/8 text-emerald-300"
-                    : "border-white/5 bg-white/2 text-slate-500"
+                      ? "bg-amber-400 online-pulse"
+                      : "bg-emerald-400 online-pulse"
+                    : "bg-slate-600"
                 }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 shrink-0rounded-full ${
-                    user === currentUser
-                      ? isHost
-                        ? "bg-amber-400 online-pulse"
-                        : "bg-emerald-400 online-pulse"
-                      : "bg-slate-600"
-                  }`}
-                />
-                {user}
-                {user === currentUser && (
-                  <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">
-                    {isHost ? "host" : "you"}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+              />
+              <span>{user}</span>
+              {user === currentUser && (
+                <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">
+                  {isHost ? "host" : "you"}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
-
         {typingUsers.length > 0 && (
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-1.5 flex items-center gap-2">
             <div className="typing-dots flex items-center gap-0.5">
               <span />
               <span />
@@ -668,86 +697,122 @@ function App() {
         )}
       </div>
 
-      <div className="chat-bg flex-1 overflow-y-auto px-3 py-5 sm:px-5">
+      {/* Scrollable Chat Area */}
+      <div className="chat-scroll chat-bg flex-1 overflow-y-auto px-3 py-5 sm:px-5">
         <div className="flex flex-col gap-1.5">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`msg-in flex ${msg.sender === "me" ? "justify-end" : msg.sender === "system" ? "justify-center" : "justify-start"}`}
-            >
-              {msg.sender === "system" ? (
-                <div className="flex items-center gap-2 rounded-full border border-sky-500/15 bg-sky-500/6 px-4 py-1.5 text-[11px] text-sky-400/70">
-                  <span className="h-1 w-1 rounded-full bg-sky-500" />
-                  {msg.text}
-                </div>
-              ) : (
-                <div
-                  className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 sm:max-w-sm lg:max-w-md ${
-                    msg.sender === "me"
-                      ? "rounded-br-sm border border-emerald-900/35 bg-[#0b2d1d]"
-                      : "rounded-bl-sm border border-white/5 bg-[#101b28]"
-                  }`}
-                >
-                  {msg.sender !== "me" && (
-                    <span className="mb-1 block text-[11px] font-semibold text-emerald-400/90">
-                      {msg.username}
-                    </span>
-                  )}
-                  <p className="text-sm leading-relaxed text-slate-200">
-                    {msg.text}
-                  </p>
-                  <div className="mt-1.5 flex items-center justify-end gap-1">
-                    <span className="text-[10px] text-slate-700">
-                      {msg.time}
-                    </span>
-                    {msg.sender === "me" &&
-                      (msg.read ? (
-                        <CheckCheck className="h-3 w-3 text-emerald-400" />
-                      ) : (
-                        <Check className="h-3 w-3 text-slate-700" />
-                      ))}
+          {messages.map((msg) => {
+            const isSystem =
+              msg.sender === "system" || msg.username === "System";
+            const isMe = !isSystem && msg.sender === "me";
+            return (
+              <div
+                key={msg.id}
+                className={`msg-in flex ${
+                  isSystem
+                    ? "justify-center py-1"
+                    : isMe
+                      ? "justify-end"
+                      : "justify-start"
+                }`}
+              >
+                {isSystem ? (
+                  <div className="system-pill flex max-w-[85%] items-center gap-2 rounded-full px-4 py-1.5 text-[11px] text-sky-400/80">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400/50" />
+                    <span className="text-center">{msg.text}</span>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                ) : (
+                  <div
+                    className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 sm:max-w-sm lg:max-w-md ${
+                      isMe
+                        ? "rounded-br-sm border border-emerald-900/35 bg-[#0b2d1d]"
+                        : "rounded-bl-sm border border-white/5 bg-[#101b28]"
+                    }`}
+                  >
+                    {!isMe && (
+                      <span className="mb-1 block text-[11px] font-semibold text-emerald-400/90">
+                        {msg.username}
+                      </span>
+                    )}
+                    <p className="text-sm leading-relaxed text-slate-200">
+                      {msg.text}
+                    </p>
+                    <div className="mt-1.5 flex items-center justify-end gap-1">
+                      <span className="text-[10px] text-slate-600">
+                        {msg.time}
+                      </span>
+                      {isMe &&
+                        (msg.read ? (
+                          <CheckCheck className="h-3 w-3 text-emerald-400" />
+                        ) : (
+                          <Check className="h-3 w-3 text-slate-600" />
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
       </div>
 
-      <div className="shrink-0border-t border-white/5 bg-[#0b1219] px-3 py-3 sm:px-4">
+      {/* Fixed Input Area */}
+      <div className="input-safe-area relative shrink-0 border-t border-white/5 bg-[#0b1219] px-3 py-3 sm:px-4">
+        {showEmojiPicker && (
+          <div
+            ref={emojiPickerRef}
+            className="emoji-picker-popup absolute bottom-full left-3 right-3 sm:left-4 sm:right-auto mb-2 z-50"
+          >
+            <EmojiPicker
+              onEmojiClick={handleEmojiClick}
+              theme="dark"
+              skinTonesDisabled
+              searchPlaceholder="Search emoji…"
+              width="100%"
+              height={380}
+              previewConfig={{ showPreview: false }}
+              lazyLoadEmojis
+            />
+          </div>
+        )}
         <form
           onSubmit={handleSendMessage}
-          className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#0f1d2b] px-3 py-1.5 transition-all duration-200 focus-within:border-emerald-500/30 focus-within:shadow-[0_0_0_3px_rgba(16,185,129,0.06)]"
+          className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#0f1d2b] pl-3 pr-2 py-2 transition-all duration-200 focus-within:border-emerald-500/30 focus-within:shadow-[0_0_0_3px_rgba(16,185,129,0.06)]"
         >
           <button
             type="button"
-            className="shrink-0p-1.5 text-slate-700 transition hover:text-slate-400"
+            onClick={() => setShowEmojiPicker((v) => !v)}
+            className={`emoji-trigger-btn shrink-0 rounded-lg p-1.5 transition-all duration-150 ${
+              showEmojiPicker
+                ? "text-emerald-400 bg-emerald-500/10"
+                : "text-slate-600 hover:text-slate-300"
+            }`}
           >
             <Smile className="h-5 w-5" />
           </button>
           <input
+            ref={inputRef}
             type="text"
             value={newMessage}
             onChange={handleTyping}
+            onFocus={() => setShowEmojiPicker(false)}
             placeholder="Write a message…"
-            className="flex-1 min-w-0 bg-transparent py-2 text-sm text-slate-100 placeholder-slate-700 outline-none"
+            className="min-w-0 flex-1 bg-transparent py-1 text-sm text-slate-100 placeholder-slate-700 outline-none"
           />
-          {newMessage.trim() ? (
-            <button
-              type="submit"
-              className="flex h-9 w-9 shrink-0items-center justify-center rounded-xl bg-emerald-500 text-white shadow-[0_3px_16px_rgba(16,185,129,0.38)] transition-all duration-150 hover:bg-emerald-400 hover:shadow-[0_5px_22px_rgba(16,185,129,0.5)] active:scale-90"
-            >
+          <button
+            type={newMessage.trim() ? "submit" : "button"}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-150 active:scale-90 ${
+              newMessage.trim()
+                ? "bg-emerald-500 text-white shadow-[0_3px_16px_rgba(16,185,129,0.4)] hover:bg-emerald-400 hover:shadow-[0_5px_22px_rgba(16,185,129,0.5)]"
+                : "border border-white/[0.07] bg-white/3 text-slate-600 hover:bg-white/6 hover:text-slate-400"
+            }`}
+          >
+            {newMessage.trim() ? (
               <Send className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/3 text-slate-600 transition hover:bg-white/6 hover:text-slate-400"
-            >
+            ) : (
               <Mic className="h-4 w-4" />
-            </button>
-          )}
+            )}
+          </button>
         </form>
       </div>
     </div>

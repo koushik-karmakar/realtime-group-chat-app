@@ -139,7 +139,7 @@ io.on("connection", (socket) => {
 
       if (password !== DEFAULT_PASSWORD) {
         socket.emit("join:error", {
-          message: `Incorrect password. The password is: ${DEFAULT_PASSWORD}`,
+          message: `Incorrect password!`,
         });
         return;
       }
