@@ -73,7 +73,7 @@ io.on("connection", (socket) => {
           Array.from(groupData.users.values()).map((u) => u.username),
         );
 
-        io.emit("message:new", {
+        socket.broadcast.emit("message:new", {
           id: Date.now(),
           text: `${cleanUsername} joined the chat`,
           username: "System",
@@ -200,7 +200,7 @@ io.on("connection", (socket) => {
           Array.from(groupData.users.values()).map((u) => u.username),
         );
 
-        io.emit("message:new", {
+        userSocket.broadcast.emit("message:new", {
           id: Date.now(),
           text: `${request.username} joined the chat (approved by host)`,
           username: "System",
@@ -246,6 +246,10 @@ io.on("connection", (socket) => {
       hostUsername: groupData.hostUsername,
     };
     socket.emit("group:status", status);
+  });
+
+  socket.on("leaveChat", () => {
+    socket.disconnect();
   });
 
   socket.on("typing", () => {

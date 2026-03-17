@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send, Mic, Smile, MoreVertical, Check, CheckCheck,
-  Users, Lock, Shield, UserPlus, X, AlertCircle, ArrowLeft,
+  Users, Lock, Shield, UserPlus, X, AlertCircle, ArrowLeft, LogOut,
 } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 import { wsConnection } from "./ws.jsx";
-import "./App.css";
+
 
 function App() {
   const [username, setUsername]           = useState("");
@@ -27,12 +27,16 @@ function App() {
   const [showPasswordField, setShowPasswordField] = useState(false);
   const [hostAlerts, setHostAlerts]       = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showMenu, setShowMenu]               = useState(false);
+  const [showLeaveModal, setShowLeaveModal]   = useState(false);
 
   const messagesEndRef     = useRef(null);
   const socketUsRef        = useRef(null);
   const hasBeenRejectedRef = useRef(false);
   const inputRef           = useRef(null);
   const emojiPickerRef     = useRef(null);
+  const menuRef            = useRef(null);
+  const menuBtnRef         = useRef(null);
   const typingTimeout      = useRef(null);
 
   const scrollToBottom = () =>
@@ -65,6 +69,123 @@ function App() {
       document.removeEventListener("touchstart", handler);
     };
   }, [showEmojiPicker]);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target) &&
+        !e.target.closest(".menu-portal")
+      ) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, [showMenu]);
+
+  const handleLeaveChat = () => {
+    setShowMenu(false);
+    setShowLeaveModal(true);
+  };
+
+  const confirmLeave = () => {
+    const socket = socketUsRef.current;
+    socket.emit("leaveChat", { username: currentUser, isHost });
+    socket.disconnect();
+
+    setIsJoined(false);
+    setIsUsernameSet(false);
+    setIsHost(false);
+    setIsPending(false);
+    setIsRejected(false);
+    hasBeenRejectedRef.current = false;
+    setUsers([]);
+    setMessages([]);
+    setGroupExists(false);
+    setHostUsername("");
+    setJoinRequests([]);
+    setShowPasswordField(false);
+    setHostAlerts([]);
+    setUsername("");
+    setPassword("");
+    setJoinError("");
+    setShowLeaveModal(false);
+    setNewMessage("");
+    setShowMenu(false);
+    setShowEmojiPicker(false);
+
+    const newSocket = wsConnection();
+    socketUsRef.current = newSocket;
+    newSocket.on("connect", () => {
+      newSocket.emit("getGroupStatus");
+      hasBeenRejectedRef.current = false;
+      setIsRejected(false);
+    });
+    newSocket.on("group:status", (s) => { setGroupExists(s.hasHost); setHostUsername(s.hostUsername); });
+    newSocket.on("users:update",  (list) => setUsers(list));
+    newSocket.on("typing:update", (list) => setTypingUsers(list.filter((u) => u !== currentUser)));
+    newSocket.on("join:request",  (req)  => setJoinRequests((p) => [...p, {
+      id: `request-${req.socketId}`, socketId: req.socketId,
+      username: req.username, timestamp: req.timestamp,
+    }]));
+    newSocket.on("request:handled", ({ socketId }) =>
+      setJoinRequests((p) => p.filter((r) => r.socketId !== socketId))
+    );
+    newSocket.on("join:pending", (data) => {
+      setIsPending(true); setCurrentUser(data.username);
+      setJoinError(data.message); setIsRejected(false);
+    });
+    newSocket.on("join:rejected", (data) => {
+      hasBeenRejectedRef.current = true;
+      setIsRejected(true); setIsPending(false); setIsUsernameSet(false);
+      setIsJoined(false); setJoinError(data.message || "Host rejected your join request");
+      setCurrentUser("");
+    });
+    newSocket.on("join:alert", (data) => {
+      const id = Date.now();
+      setHostAlerts((p) => [...p, { id, username: data.username, message: data.message }]);
+      setTimeout(() => setHostAlerts((p) => p.filter((a) => a.id !== id)), 3000);
+    });
+    newSocket.on("group:reset", () => {
+      setIsJoined(false); setIsUsernameSet(false); setIsHost(false);
+      setIsPending(false); setIsRejected(false); hasBeenRejectedRef.current = false;
+      setUsers([]); setMessages([]); setGroupExists(false);
+      setHostUsername(""); setJoinRequests([]); setShowPasswordField(false); setHostAlerts([]);
+      setUsername(""); setPassword(""); setJoinError(""); setNewMessage("");
+      setShowMenu(false); setShowLeaveModal(false); setShowEmojiPicker(false);
+      setTimeout(() => newSocket.emit("getGroupStatus"), 100);
+    });
+    newSocket.on("user:left", (data) => {
+      setMessages((p) => [...p, {
+        id: Date.now(),
+        text: `${data.username} left the room`,
+        username: "System",
+        sender: "system",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      }]);
+    });
+    newSocket.on("join:success", ({ username, isHost, message }) => {
+      if (hasBeenRejectedRef.current) return;
+      setJoinError(""); setIsJoined(true); setIsPending(false);
+      setIsRejected(false); hasBeenRejectedRef.current = false;
+      setCurrentUser(username); setIsHost(isHost); setShowPasswordField(false);
+    });
+    newSocket.on("join:error", (data) => {
+      if (data.message === "Host rejected your join request") {
+        setIsRejected(true); hasBeenRejectedRef.current = true;
+      }
+      setJoinError(data.message);
+      setIsUsernameSet(false); setIsPending(false); setIsRejected(false); setShowPasswordField(false);
+    });
+    newSocket.on("message:new", (msg) =>
+      setMessages((p) => [...p, { ...msg, sender: msg.sender === newSocket.id ? "me" : "other" }])
+    );
+  };
 
   useEffect(() => {
     socketUsRef.current = wsConnection();
@@ -100,12 +221,65 @@ function App() {
       setHostAlerts((p) => [...p, { id, username: data.username, message: data.message }]);
       setTimeout(() => setHostAlerts((p) => p.filter((a) => a.id !== id)), 3000);
     });
-    socket.on("group:reset", (data) => {
-      setJoinError(`Host (${data.hostUsername}) disconnected. Group closed.`);
+    socket.on("group:reset", () => {
+      socket.disconnect();
       setIsJoined(false); setIsUsernameSet(false); setIsHost(false);
       setIsPending(false); setIsRejected(false); hasBeenRejectedRef.current = false;
       setUsers([]); setMessages([]); setGroupExists(false);
       setHostUsername(""); setJoinRequests([]); setShowPasswordField(false); setHostAlerts([]);
+      setUsername(""); setPassword(""); setJoinError(""); setNewMessage("");
+      setShowMenu(false); setShowLeaveModal(false); setShowEmojiPicker(false);
+
+      const freshSocket = wsConnection();
+      socketUsRef.current = freshSocket;
+      freshSocket.on("connect", () => {
+        freshSocket.emit("getGroupStatus");
+        hasBeenRejectedRef.current = false;
+        setIsRejected(false);
+      });
+      freshSocket.on("group:status", (s) => { setGroupExists(s.hasHost); setHostUsername(s.hostUsername); });
+      freshSocket.on("users:update",  (list) => setUsers(list));
+      freshSocket.on("join:pending", (data) => {
+        setIsPending(true); setCurrentUser(data.username);
+        setJoinError(data.message); setIsRejected(false);
+      });
+      freshSocket.on("join:rejected", (data) => {
+        hasBeenRejectedRef.current = true;
+        setIsRejected(true); setIsPending(false); setIsUsernameSet(false);
+        setIsJoined(false); setJoinError(data.message || "Host rejected your join request");
+        setCurrentUser("");
+      });
+      freshSocket.on("join:alert", (data) => {
+        const id = Date.now();
+        setHostAlerts((p) => [...p, { id, username: data.username, message: data.message }]);
+        setTimeout(() => setHostAlerts((p) => p.filter((a) => a.id !== id)), 3000);
+      });
+      freshSocket.on("join:success", ({ username, isHost, message }) => {
+        if (hasBeenRejectedRef.current) return;
+        setJoinError(""); setIsJoined(true); setIsPending(false);
+        setIsRejected(false); hasBeenRejectedRef.current = false;
+        setCurrentUser(username); setIsHost(isHost); setShowPasswordField(false);
+      });
+      freshSocket.on("join:error", (data) => {
+        if (data.message === "Host rejected your join request") {
+          setIsRejected(true); hasBeenRejectedRef.current = true;
+        }
+        setJoinError(data.message);
+        setIsUsernameSet(false); setIsPending(false); setIsRejected(false); setShowPasswordField(false);
+      });
+      freshSocket.on("message:new", (msg) =>
+        setMessages((p) => [...p, { ...msg, sender: msg.sender === freshSocket.id ? "me" : "other" }])
+      );
+    });
+
+    socket.on("user:left", (data) => {
+      setMessages((p) => [...p, {
+        id: Date.now(),
+        text: `${data.username} left the room`,
+        username: "System",
+        sender: "system",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      }]);
     });
     return () => { if (socketUsRef.current) socketUsRef.current.disconnect(); };
   }, []);
@@ -118,10 +292,6 @@ function App() {
       setJoinError(""); setIsJoined(true); setIsPending(false);
       setIsRejected(false); hasBeenRejectedRef.current = false;
       setCurrentUser(username); setIsHost(isHost); setShowPasswordField(false);
-      setMessages((p) => [...p, {
-        id: Date.now(), text: message, username: "System", sender: "system",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      }]);
     });
     socket.on("join:error", (data) => {
       if (data.message === "Host rejected your join request") {
@@ -258,7 +428,7 @@ function App() {
                 </div>
                 <button type="submit"
                   disabled={!username.trim() || isPending || isRejected || hasBeenRejectedRef.current}
-                  className={`btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                  className={`cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
                     groupExists
                       ? "bg-amber-500 hover:bg-amber-400 shadow-[0_4px_20px_rgba(245,158,11,0.3)]"
                       : "bg-emerald-500 hover:bg-emerald-400 shadow-[0_4px_20px_rgba(16,185,129,0.28)]"
@@ -303,13 +473,13 @@ function App() {
                 {groupExists && !password.trim() ? (
                   <button type="button" onClick={handleSendRequest}
                     disabled={isPending || isRejected || hasBeenRejectedRef.current}
-                    className="btn-lift flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-white shadow-[0_4px_20px_rgba(245,158,11,0.28)] hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40">
+                    className="cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-white shadow-[0_4px_20px_rgba(245,158,11,0.28)] hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40">
                     <UserPlus className="h-4 w-4" /> Send Join Request
                   </button>
                 ) : (
                   <button type="submit"
                     disabled={!username.trim() || isPending || isRejected || hasBeenRejectedRef.current}
-                    className={`btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                    className={`cursor-pointer btn-lift flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
                       groupExists
                         ? "bg-amber-500 hover:bg-amber-400 shadow-[0_4px_20px_rgba(245,158,11,0.28)]"
                         : "bg-emerald-500 hover:bg-emerald-400 shadow-[0_4px_20px_rgba(16,185,129,0.28)]"
@@ -374,11 +544,11 @@ function App() {
               <p className="mb-3.5 mt-0.5 text-xs text-slate-500">wants to join the room</p>
               <div className="flex gap-2">
                 <button onClick={() => handleRequestAction(req.socketId, "approve")}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 py-2 text-xs font-semibold text-emerald-400 transition hover:bg-emerald-500/20">
+                  className="cursor-pointer flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 py-2 text-xs font-semibold text-emerald-400 transition hover:bg-emerald-500/20">
                   <Check className="h-3.5 w-3.5" /> Allow
                 </button>
                 <button onClick={() => handleRequestAction(req.socketId, "reject")}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/8 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/15">
+                  className="cursor-pointer flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/8 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-500/15">
                   <X className="h-3.5 w-3.5" /> Reject
                 </button>
               </div>
@@ -421,50 +591,68 @@ function App() {
               {joinRequests.length}
             </div>
           )}
-          <button className="rounded-lg p-1.5 text-slate-600 transition hover:bg-white/4 hover:text-white">
-            <MoreVertical className="h-5 w-5" />
-          </button>
+          <div ref={menuRef}>
+            <button
+              ref={menuBtnRef}
+              onClick={() => setShowMenu((v) => !v)}
+              className={`rounded-lg p-1.5 transition hover:bg-white/4 hover:text-white ${showMenu ? "bg-white/6 text-white" : "text-slate-600"}`}>
+              <MoreVertical className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="chat-header-sticky shrink-0 border-b border-white/4 bg-[#09101a] px-4 py-2">
         <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-slate-700">
-            Online
-          </span>
-          {users.map((user, i) => (
-            <div key={i}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                user === currentUser
-                  ? isHost
-                    ? "border-amber-500/20 bg-amber-500/8 text-amber-300"
-                    : "border-emerald-500/20 bg-emerald-500/8 text-emerald-300"
-                  : "border-white/5 bg-white/2 text-slate-500"
-              }`}>
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                user === currentUser
-                  ? isHost ? "bg-amber-400 online-pulse" : "bg-emerald-400 online-pulse"
-                  : "bg-slate-600"
-              }`} />
-              <span>{user}</span>
-              {user === currentUser && (
-                <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">
-                  {isHost ? "host" : "you"}
-                </span>
-              )}
+        
+          {typingUsers.length > 0 && (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <div className="typing-dots flex items-center gap-0.5">
+                <span /><span /><span />
+              </div>
+              <span className="text-[11px] italic text-slate-600">
+                {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing…
+              </span>
             </div>
-          ))}
-        </div>
-        {typingUsers.length > 0 && (
-          <div className="mt-1.5 flex items-center gap-2">
-            <div className="typing-dots flex items-center gap-0.5">
-              <span /><span /><span />
-            </div>
-            <span className="text-[11px] italic text-slate-600">
-              {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing…
-            </span>
+          )}
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {users.map((user, i) => {
+              const isCurrentUser = user === currentUser;
+              const isUserHost    = user === hostUsername;
+              return (
+                <div key={i}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                    isCurrentUser
+                      ? isHost
+                        ? "border-amber-500/20 bg-amber-500/8 text-amber-300"
+                        : "border-emerald-500/20 bg-emerald-500/8 text-emerald-300"
+                      : isUserHost
+                        ? "border-amber-500/20 bg-amber-500/8 text-amber-300"
+                        : "border-white/5 bg-white/2 text-slate-500"
+                  }`}>
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    isCurrentUser
+                      ? isHost ? "bg-amber-400 online-pulse" : "bg-emerald-400 online-pulse"
+                      : isUserHost
+                        ? "bg-amber-400 online-pulse"
+                        : "bg-slate-600"
+                  }`} />
+                  <span>{user}</span>
+                  {isUserHost && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400/70">
+                      host
+                    </span>
+                  )}
+                  {isCurrentUser && !isUserHost && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">
+                      you
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
       </div>
 
       <div className="chat-scroll chat-bg min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-5">
@@ -512,6 +700,70 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {showMenu && (
+        <div
+          ref={menuRef}
+          className="menu-portal fixed z-200 w-48 overflow-hidden rounded-xl border border-white/8 bg-[#111d2b] shadow-[0_16px_48px_rgba(0,0,0,0.6)] menu-open"
+          style={{
+            top: (() => {
+              const btn = menuBtnRef.current;
+              if (!btn) return 48;
+              const r = btn.getBoundingClientRect();
+              return r.bottom + 6;
+            })(),
+            right: (() => {
+              const btn = menuBtnRef.current;
+              if (!btn) return 16;
+              return window.innerWidth - btn.getBoundingClientRect().right;
+            })(),
+          }}>
+          <button
+            onClick={handleLeaveChat}
+            className="cursor-pointer flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 transition hover:bg-red-500/10">
+            <LogOut className="h-4 w-4" />
+            {isHost ? "Close Chat" : "Leave Chat"}
+          </button>
+        </div>
+      )}
+
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowLeaveModal(false)} />
+          <div className="relative w-full max-w-xs overflow-hidden rounded-2xl border border-white/8 bg-[#0f1a26] shadow-[0_32px_80px_rgba(0,0,0,0.7)] modal-open">
+            <div className={`h-1 w-full ${isHost ? "bg-linear-to-r from-red-500 to-red-600" : "bg-linear-to-r from-red-500 to-red-600"}`} />
+            <div className="p-6">
+              <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl border ${
+                isHost
+                  ? "border-red-500/25 bg-red-500/10 text-red-400"
+                  : "border-red-500/25 bg-red-500/10 text-red-400"
+              }`}>
+                <LogOut className="h-5 w-5" />
+              </div>
+              <h3 className="font-syne mb-1.5 text-base font-bold text-white">
+                {isHost ? "Close Chat?" : "Leave Chat?"}
+              </h3>
+              <p className="mb-6 text-sm leading-relaxed text-slate-500">
+                {isHost
+                  ? "This will end the session for all members. Everyone will be removed."
+                  : "You'll be removed from the room. You can rejoin if the host allows."}
+              </p>
+              <div className="flex gap-2.5">
+                <button
+                  onClick={() => setShowLeaveModal(false)}
+                  className="cursor-pointer flex-1 rounded-xl border border-white/[0.07] py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/4 hover:text-white">
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmLeave}
+                  className="cursor-pointer flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-bold text-white shadow-[0_4px_16px_rgba(239,68,68,0.3)] transition hover:bg-red-400 hover:shadow-[0_6px_22px_rgba(239,68,68,0.4)] active:scale-95">
+                  {isHost ? "Close Chat" : "Leave"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="input-safe-area relative shrink-0 border-t border-white/5 bg-[#0b1219] px-3 py-3 sm:px-4">
         {showEmojiPicker && (
